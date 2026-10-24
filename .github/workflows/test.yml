@@ -1,0 +1,70 @@
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: payments
+          POSTGRES_PASSWORD: payments
+          POSTGRES_DB: payments
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U payments -d payments"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      rabbitmq:
+        image: rabbitmq:3.13-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: payments
+          RABBITMQ_DEFAULT_PASS: payments
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      API_KEY: test-key-at-least-sixteen
+      DATABASE_URL: postgresql+asyncpg://payments:payments@localhost:5432/payments
+      TEST_DATABASE_URL: postgresql+asyncpg://payments:payments@localhost:5432/payments
+      TEST_RABBITMQ_URL: amqp://payments:payments@localhost:5672/
+      WEBHOOK_ALLOWED_HOSTS: '["example.com"]'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.5'
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run alembic upgrade head
+      - run: uv run alembic check
+      - run: uv run pytest -q
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose up --build --wait --wait-timeout 180
+      - run: curl --fail http://localhost:8000/health -H 'X-API-Key:local-development-change-me'
+      - name: Wait for payment consumer
+        run: |
+          for attempt in $(seq 1 30); do
+            if docker compose exec -T rabbitmq rabbitmqctl list_queues name consumers | grep -Eq '^payments.new[[:space:]]+1$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v
