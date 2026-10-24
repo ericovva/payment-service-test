@@ -64,7 +64,11 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Start isolated load-test webhook
+        run: docker compose -f compose.yaml -f compose.load.yaml up --build --wait --wait-timeout 180
+      - name: Bounded API load smoke (10 RPS, not a capacity benchmark)
+        run: docker compose -f compose.yaml -f compose.load.yaml run --rm -e RATE=10 -e DURATION=10s -e MAX_BACKLOG=500 k6 run /load/k6.js
       - if: failure()
-        run: docker compose logs
+        run: docker compose -f compose.yaml -f compose.load.yaml logs
       - if: always()
-        run: docker compose down -v
+        run: docker compose -f compose.yaml -f compose.load.yaml down -v

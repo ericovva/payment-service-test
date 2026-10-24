@@ -99,9 +99,10 @@ async def test_gateway_exception_gets_three_attempts(session_factory):
     for attempt in range(1, 4):
         await processor.process(PaymentEvent(payment_id=payment_id, attempt=attempt))
     assert gateway.charge.await_count == 3
-    webhooks.send.assert_not_awaited()
+    webhooks.send.assert_awaited_once()
     async with session_factory() as session:
         payment = await session.get(Payment, payment_id)
+        assert payment.webhook_delivered_at is not None
         assert payment.status == "failed"
         assert payment.dead_lettered_at is not None
         assert payment.processed_at is not None

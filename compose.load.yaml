@@ -1,0 +1,38 @@
+# Isolated test overlay; never use this HTTP webhook allowlist in production.
+# docker compose -f compose.yaml -f compose.load.yaml up --build -d
+services:
+  api:
+    environment:
+      WEBHOOK_ALLOWED_HOSTS: '["webhook"]'
+      WEBHOOK_ALLOW_HTTP: "true"
+    depends_on:
+      webhook:
+        condition: service_healthy
+  consumer:
+    environment:
+      WEBHOOK_ALLOWED_HOSTS: '["webhook"]'
+      WEBHOOK_ALLOW_HTTP: "true"
+  webhook:
+    image: python:3.12-slim
+    command: ["python", "/load/webhook_receiver.py"]
+    volumes:
+      - ./load/webhook_receiver.py:/load/webhook_receiver.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), timeout=2).close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  k6:
+    image: grafana/k6:0.57.0
+    profiles: ["load"]
+    env_file: .env
+    environment:
+      BASE_URL: http://api:8000
+      WEBHOOK_URL: http://webhook:8080/payments
+    volumes:
+      - ./load:/load:ro
+    entrypoint: ["k6"]
+    command: ["run", "/load/k6.js"]
+    depends_on:
+      api:
+        condition: service_healthy

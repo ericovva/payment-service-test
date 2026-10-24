@@ -20,7 +20,10 @@ from app.payments.services.processing import Processor
 settings = get_settings()
 broker = RabbitBroker(
     settings.rabbitmq_url,
-    default_channel=Channel(prefetch_count=1, publisher_confirms=True, on_return_raises=True),
+    graceful_timeout=settings.gateway_timeout + settings.webhook_timeout + 5,
+    default_channel=Channel(
+        prefetch_count=settings.worker_concurrency, publisher_confirms=True, on_return_raises=True
+    ),
 )
 queue = RabbitQueue(
     "payments.new",
@@ -29,11 +32,18 @@ queue = RabbitQueue(
 )
 dlq = RabbitQueue("payments.dlq", durable=True)
 client = httpx.AsyncClient(
-    timeout=settings.webhook_timeout, follow_redirects=False, trust_env=False
+    timeout=settings.webhook_timeout,
+    follow_redirects=False,
+    trust_env=False,
+    limits=httpx.Limits(
+        max_connections=settings.worker_concurrency,
+        max_keepalive_connections=settings.worker_concurrency,
+    ),
 )
 processor = Processor(sessions, SimulatedGateway(), Webhooks(client), settings)
 app = FastStream(broker)
 relay_task: asyncio.Task | None = None
+recovery_task: asyncio.Task | None = None
 
 
 async def raw_body(message):
@@ -61,16 +71,31 @@ async def declare_topology():
 
 @app.after_startup
 async def start_relay():
-    global relay_task
-    relay_task = asyncio.create_task(relay(sessions, broker, settings.outbox_poll_seconds))
+    global relay_task, recovery_task
+    relay_task = asyncio.create_task(
+        relay(
+            sessions,
+            broker,
+            settings.outbox_poll_seconds,
+            settings.outbox_batch_size,
+            settings.outbox_publish_concurrency,
+            settings.outbox_lease_seconds,
+        )
+    )
+    recovery_task = asyncio.create_task(processor.recovery_loop())
 
 
 @app.on_shutdown
 async def stop_relay():
-    if relay_task:
-        relay_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await relay_task
+    for task in (relay_task, recovery_task):
+        if task:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+@app.after_shutdown
+async def close_resources():
     await client.aclose()
     await engine.dispose()
 

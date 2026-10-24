@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -17,6 +17,7 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 
 @router.post("/api/v1/payments", response_model=PaymentAccepted, status_code=202)
 async def create_payment(
+    request: Request,
     body: PaymentCreate,
     session: Session,
     idempotency_key: Annotated[str, Header(min_length=1, max_length=255)],
@@ -30,7 +31,13 @@ async def create_payment(
     if url.scheme != "https" and not settings.webhook_allow_http:
         raise HTTPException(422, "Webhook URL must use HTTPS")
     try:
-        payment = await repository.create_payment(session, body, idempotency_key)
+        payment = await repository.create_payment(
+            session, body, idempotency_key, request.app.state.backlog.allows_new_payment
+        )
+    except repository.BacklogFull:
+        raise HTTPException(
+            429, "Payment backlog limit reached or signal stale", headers={"Retry-After": "1"}
+        ) from None
     except repository.IdempotencyConflict:
         raise HTTPException(409, "Idempotency-Key was used with a different request") from None
     return PaymentAccepted(

@@ -7,12 +7,16 @@ from app.payments.models.payment import Payment
 from app.payments.schemas.payments import PaymentCreate
 
 
+class BacklogFull(Exception):
+    pass
+
+
 class IdempotencyConflict(Exception):
     pass
 
 
 async def create_payment(
-    session: AsyncSession, body: PaymentCreate, idempotency_key: str
+    session: AsyncSession, body: PaymentCreate, idempotency_key: str, admit=None
 ) -> Payment:
     payment = Payment(
         amount=body.amount,
@@ -25,6 +29,15 @@ async def create_payment(
     )
     try:
         async with session.begin():
+            existing = await session.scalar(
+                select(Payment).where(Payment.idempotency_key == idempotency_key)
+            )
+            if existing:
+                if existing.request_hash != body.fingerprint():
+                    raise IdempotencyConflict
+                return existing
+            if admit is not None and not admit():
+                raise BacklogFull
             session.add(payment)
             await session.flush()
             session.add(

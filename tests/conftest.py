@@ -11,6 +11,7 @@ os.environ["API_KEY"] = "test-key-at-least-sixteen"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["WEBHOOK_ALLOWED_HOSTS"] = '["example.com"]'
 os.environ["WEBHOOK_ALLOW_HTTP"] = "false"
+os.environ["API_MAX_PENDING_PAYMENTS"] = "0"
 
 from app.infrastructure.database.base import Base  # noqa: E402
 from app.infrastructure.database.session import get_session  # noqa: E402
