@@ -7,9 +7,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.api import app
-from app.db import get_session
-from app.models import Base, Outbox, Payment
+from app.infrastructure.database.base import Base
+from app.infrastructure.database.outbox import Outbox
+from app.infrastructure.database.session import get_session
+from app.main import app
+from app.payments.models.payment import Payment
 
 PAYMENTS = "/api/v1/payments"
 

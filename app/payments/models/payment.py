@@ -1,18 +1,12 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Index, Numeric, String, Uuid
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import JSON, CheckConstraint, DateTime, Numeric, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-def utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
-class Base(DeclarativeBase):
-    pass
+from app.infrastructure.database.base import Base, utcnow
 
 
 class Payment(Base):
@@ -37,14 +31,3 @@ class Payment(Base):
     webhook_delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivery_attempts: Mapped[int] = mapped_column(default=0)
     dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class Outbox(Base):
-    __tablename__ = "outbox"
-    __table_args__ = (Index("ix_outbox_pending", "published_at", "available_at"),)
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    topic: Mapped[str] = mapped_column(String(64))
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

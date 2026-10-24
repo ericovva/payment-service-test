@@ -11,8 +11,8 @@ from faststream.rabbit import Channel, RabbitBroker, RabbitQueue
 from faststream.rabbit import TestRabbitBroker as BrokerHarness
 from faststream.rabbit.message import RabbitMessage
 
-from app import worker
-from app.schemas import PaymentEvent
+from app.infrastructure.messaging import worker
+from app.payments.schemas.payments import PaymentEvent
 
 
 async def test_consumer_decodes_and_dispatches_payment(monkeypatch):

@@ -8,11 +8,14 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.config import Settings
-from app.models import Outbox, Payment, utcnow
-from app.outbox import publish_one
-from app.processing import Processor, Webhooks
-from app.schemas import PaymentEvent
+from app.core.config import Settings
+from app.infrastructure.database.base import utcnow
+from app.infrastructure.database.outbox import Outbox
+from app.infrastructure.messaging.outbox import publish_one
+from app.payments.integrations.webhooks import Webhooks
+from app.payments.models.payment import Payment
+from app.payments.schemas.payments import PaymentEvent
+from app.payments.services.processing import Processor
 
 
 async def seed_payment(sessions):

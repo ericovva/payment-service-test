@@ -3,7 +3,8 @@ import logging
 
 from sqlalchemy import select
 
-from app.models import Outbox, utcnow
+from app.infrastructure.database.base import utcnow
+from app.infrastructure.database.outbox import Outbox
 
 log = logging.getLogger(__name__)
 

@@ -31,7 +31,7 @@ services:
   api:
     build: .
     env_file: .env
-    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.api:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -54,7 +54,7 @@ services:
   consumer:
     build: .
     env_file: .env
-    command: ["python", "-m", "app.worker"]
+    command: ["python", "-m", "app.infrastructure.messaging.worker"]
     depends_on:
       api:
         condition: service_healthy

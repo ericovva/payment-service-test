@@ -210,10 +210,32 @@ docker compose exec api alembic upgrade head
 
 ## Структура
 
-- `app/` — API, настройки, модели, обработка платежей и worker/outbox.
+Сначала выделяется приложение, внутри него — слои. Общие настройки и
+инфраструктура вынесены отдельно; новые предметные приложения можно
+добавлять рядом с `payments`.
+
+```text
+app/
+├── main.py                 # сборка FastAPI и общие HTTP-эндпоинты
+├── core/                   # настройки и аутентификация
+├── payments/
+│   ├── api/                # HTTP-маршруты платежей
+│   ├── schemas/            # входные/выходные схемы и события
+│   ├── models/             # модель Payment
+│   ├── repositories/       # создание платежа с transactional outbox
+│   ├── services/           # обработка платежа и политика повторов
+│   └── integrations/       # эмулятор шлюза и webhook-клиент
+└── infrastructure/
+    ├── database/           # engine, сессии, Base и модель Outbox
+    └── messaging/          # RabbitMQ consumer и outbox publisher
+```
+
 - `migrations/` — Alembic и исходная схема `payments` / `outbox`.
-- `tests/` — проверки API, идемпотентности и обработки.
+- `tests/` — проверки API, идемпотентности, обработки и брокера.
 - `compose.yaml` — PostgreSQL, RabbitMQ, API и один consumer.
+
+Точки входа: `uvicorn app.main:app` и
+`python -m app.infrastructure.messaging.worker`.
 
 ## Проверка сценариев вручную
 

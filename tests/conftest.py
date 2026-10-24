@@ -12,9 +12,9 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["WEBHOOK_ALLOWED_HOSTS"] = '["example.com"]'
 os.environ["WEBHOOK_ALLOW_HTTP"] = "false"
 
-from app.api import app  # noqa: E402
-from app.db import get_session  # noqa: E402
-from app.models import Base  # noqa: E402
+from app.infrastructure.database.base import Base  # noqa: E402
+from app.infrastructure.database.session import get_session  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture

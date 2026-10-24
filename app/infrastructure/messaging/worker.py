@@ -9,11 +9,13 @@ from faststream.rabbit import Channel, RabbitBroker, RabbitQueue
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.config import get_settings
-from app.db import engine, sessions
-from app.outbox import relay
-from app.processing import Processor, SimulatedGateway, Webhooks
-from app.schemas import PaymentEvent
+from app.core.config import get_settings
+from app.infrastructure.database.session import engine, sessions
+from app.infrastructure.messaging.outbox import relay
+from app.payments.integrations.gateway import SimulatedGateway
+from app.payments.integrations.webhooks import Webhooks
+from app.payments.schemas.payments import PaymentEvent
+from app.payments.services.processing import Processor
 
 settings = get_settings()
 broker = RabbitBroker(

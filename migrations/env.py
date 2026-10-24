@@ -3,8 +3,10 @@ import asyncio
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import get_settings
-from app.models import Base
+from app.core.config import get_settings
+from app.infrastructure.database.base import Base
+from app.infrastructure.database.outbox import Outbox  # noqa: F401
+from app.payments.models.payment import Payment  # noqa: F401
 
 
 def run_migrations(connection):
