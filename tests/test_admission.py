@@ -189,3 +189,21 @@ async def test_slow_body_times_out_and_releases_slot():
     assert sent[0]["status"] == 408
     assert wrapper.inflight == 0
     app.assert_not_awaited()
+
+
+@pytest.mark.parametrize("error_kind", ["pool", "operational"])
+async def test_database_overload_returns_retryable_503(client, monkeypatch, error_kind):
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import TimeoutError as PoolTimeout
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async def unavailable(*args, **kwargs):
+        if error_kind == "pool":
+            raise PoolTimeout("pool full")
+        raise OperationalError("SELECT 1", {}, RuntimeError("database unavailable"))
+
+    monkeypatch.setattr(AsyncSession, "execute", unavailable)
+    response = await client.get("/health")
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "1"
+    assert response.json() == {"detail": "Database temporarily unavailable"}

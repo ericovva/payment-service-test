@@ -256,3 +256,53 @@ async def test_final_gateway_failure_survives_crash_before_notification(session_
         assert saved.dead_lettered_at is not None
         dead = await session.scalar(select(Outbox).where(Outbox.topic == "payments.dlq"))
         assert dead.payload["error_type"] == "TimeoutError"
+
+
+async def test_gateway_success_before_commit_retries_same_simulated_result(
+    session_factory, monkeypatch
+):
+    from sqlalchemy import inspect
+
+    from app.payments.integrations.gateway import SimulatedGateway
+
+    event = await seed(session_factory)
+    monkeypatch.setattr("app.payments.integrations.gateway.random.uniform", lambda *_: 0)
+    outcomes = []
+    simulator = SimulatedGateway()
+
+    async def charge(payment):
+        outcome = await simulator.charge(payment)
+        outcomes.append(outcome)
+        return outcome
+
+    gateway = AsyncMock()
+    gateway.charge.side_effect = charge
+
+    def fail_result_commit(session):
+        if any(
+            isinstance(value, Payment)
+            and value.status != "pending"
+            and inspect(value).attrs.status.history.has_changes()
+            for value in session.dirty
+        ):
+            raise SQLAlchemyError("crash after gateway response before result commit")
+
+    original = processor(session_factory, gateway)
+    sa_event.listen(Session, "before_commit", fail_result_commit)
+    try:
+        with pytest.raises(SQLAlchemyError):
+            await original.process(event)
+    finally:
+        sa_event.remove(Session, "before_commit", fail_result_commit)
+    async with session_factory() as session:
+        assert (await session.get(Payment, event.payment_id)).status == "pending"
+    await expire(session_factory, event.payment_id)
+    restarted = processor(session_factory, gateway)
+    await restarted.recover_expired()
+    await restarted.process(event)
+    assert len(outcomes) == 2
+    assert outcomes[0] == outcomes[1]
+    async with session_factory() as session:
+        saved = await session.get(Payment, event.payment_id)
+        assert saved.status == outcomes[0]
+        assert saved.webhook_delivered_at is not None

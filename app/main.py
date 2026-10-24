@@ -1,9 +1,13 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as DatabasePoolTimeout
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admission import BacklogGate
@@ -58,3 +62,16 @@ async def health(session: Annotated[AsyncSession, Depends(get_session)]):
 @app.get("/internal/backlog")
 async def backlog_snapshot():
     return backlog.snapshot()
+
+
+@app.exception_handler(DatabasePoolTimeout)
+@app.exception_handler(OperationalError)
+async def database_unavailable(request, error):
+    logging.getLogger(__name__).warning(
+        "Database temporarily unavailable: %s", type(error).__name__
+    )
+    return JSONResponse(
+        {"detail": "Database temporarily unavailable"},
+        status_code=503,
+        headers={"Retry-After": "1"},
+    )
